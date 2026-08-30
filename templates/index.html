@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ollama RAG Chat</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <main class="app-shell">
+        <header class="topbar">
+            <div class="brand">
+                <span class="brand-mark">◈</span>
+                <div>
+                    <p class="eyebrow">LOCAL KNOWLEDGE WORKSPACE</p>
+                    <h1>Ollama RAG Chat</h1>
+                </div>
+            </div>
+            <div class="connection-status">
+                <span class="status-dot {% if ready %}online{% endif %}"></span>
+                {% if ready %}External data ready{% else %}Waiting for data{% endif %}
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+                <p class="toast {{ category }}" role="alert">{{ message }}</p>
+            {% endfor %}
+        {% endwith %}
+
+        <div class="workspace">
+            <aside class="sidebar">
+                <section class="panel upload-panel">
+                    <p class="panel-kicker">KNOWLEDGE BASE</p>
+                    <h2>Add an external source</h2>
+                    <p class="panel-copy">Upload Markdown and make it searchable by your local Ollama model.</p>
+
+                    <form id="upload-form" action="{{ url_for('upload_markdown') }}" method="post" enctype="multipart/form-data">
+                        <input class="file-input" id="markdown_file" name="markdown_file" type="file" accept=".md,text/markdown" required data-lock-answer>
+                        <label id="file-picker" class="file-picker" for="markdown_file">
+                            <span class="file-icon">↑</span>
+                            <span>
+                                <strong>Choose Markdown file</strong>
+                                <small id="file-name">.md files, up to 5 MB</small>
+                            </span>
+                        </label>
+                        <button id="upload-button" class="primary-button" type="submit" data-lock-answer>
+                            <span id="upload-button-text">Upload file</span>
+                            <span class="button-spinner" aria-hidden="true"></span>
+                        </button>
+                    </form>
+                </section>
+
+                <section class="panel sources-panel">
+                    <div class="section-heading">
+                        <div>
+                            <p class="panel-kicker">ACTIVE CONTEXT</p>
+                            <h2>External data sources</h2>
+                        </div>
+                        <span class="source-count">{{ source_files|length }}</span>
+                    </div>
+
+                    {% if source_files %}
+                        <ul class="source-list">
+                            {% for source_file in source_files %}
+                                <li>
+                                    <label class="source-option">
+                                        <input
+                                            type="checkbox"
+                                            name="selected_sources"
+                                            value="{{ source_file }}"
+                                            form="chat-form"
+                                            {% if source_file in selected_sources %}checked{% endif %}
+                                        >
+                                        <span class="checkmark" aria-hidden="true">✓</span>
+                                        <span class="source-icon">⌁</span>
+                                        <span>{{ source_file }}</span>
+                                    </label>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="empty-sources">No sources yet. Upload a Markdown file to begin.</p>
+                    {% endif %}
+                </section>
+            </aside>
+
+            <section class="chat-panel" aria-label="Chat conversation">
+                <div class="chat-header">
+                    <div>
+                        <p class="panel-kicker">CONVERSATION</p>
+                        <h2>Ask anything</h2>
+                    </div>
+                    {% if chat_history %}
+                        <form action="{{ url_for('clear_chat') }}" method="post">
+                            <button class="clear-button" type="submit" data-lock-answer>Clear chat</button>
+                        </form>
+                    {% endif %}
+                </div>
+
+                <div id="chat-messages" class="chat-messages" aria-live="polite">
+                    {% if chat_history %}
+                        {% for message in chat_history %}
+                            <article class="chat-message {{ message.role }}">
+                                <div class="avatar">{% if message.role == "user" %}Y{% else %}AI{% endif %}</div>
+                                <div class="message-content">
+                                    <p class="message-name">{% if message.role == "user" %}You{% else %}Assistant{% endif %}</p>
+                                    <p>{{ message.content }}</p>
+                                </div>
+                            </article>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-chat">
+                            <div class="empty-chat-icon">✦</div>
+                            {% if ready %}
+                                <h3>Your local AI workspace is ready</h3>
+                                <p>Ask a question using the external sources you selected.</p>
+                            {% else %}
+                                <h3>Add your first external source</h3>
+                                <p>Upload a Markdown file to start a grounded conversation.</p>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+
+                <form id="chat-form" class="composer" action="{{ url_for('ask') }}" method="post">
+                    <label class="sr-only" for="question">Message</label>
+                    <textarea id="question" name="question" rows="1" placeholder="Message Ollama RAG Chat..." {% if not ready %}disabled{% endif %} data-lock-answer></textarea>
+                    <button id="send-button" class="send-button" type="submit" {% if not ready %}disabled{% endif %} data-lock-answer aria-label="Send message">↑</button>
+                </form>
+                {% if not ready %}
+                    <p class="composer-hint">Add an external Markdown source to begin chatting.</p>
+                {% else %}
+                    <p class="composer-hint">Your data stays local. The assistant searches your selected sources before answering.</p>
+                {% endif %}
+            </section>
+        </div>
+    </main>
+
+    <script>
+        const fileInput = document.getElementById("markdown_file");
+        const fileName = document.getElementById("file-name");
+        const filePicker = document.getElementById("file-picker");
+        const uploadForm = document.getElementById("upload-form");
+        const uploadButton = document.getElementById("upload-button");
+        const uploadButtonText = document.getElementById("upload-button-text");
+        const chatForm = document.getElementById("chat-form");
+        const questionInput = document.getElementById("question");
+        const chatMessages = document.getElementById("chat-messages");
+
+        fileInput.addEventListener("change", () => {
+            fileName.textContent = fileInput.files.length ? fileInput.files[0].name : ".md files, up to 5 MB";
+        });
+
+        uploadForm.addEventListener("submit", (event) => {
+            if (uploadForm.dataset.processing === "true") {
+                event.preventDefault();
+                return;
+            }
+            uploadForm.dataset.processing = "true";
+            uploadButton.disabled = true;
+            uploadButtonText.textContent = "Uploading…";
+            filePicker.classList.add("disabled");
+            filePicker.setAttribute("aria-disabled", "true");
+        });
+
+        chatForm.addEventListener("submit", (event) => {
+            if (chatForm.dataset.processing === "true") {
+                event.preventDefault();
+                return;
+            }
+
+            const question = questionInput.value.trim();
+            if (!question) {
+                event.preventDefault();
+                return;
+            }
+
+            chatForm.dataset.processing = "true";
+
+            const hiddenQuestion = document.createElement("input");
+            hiddenQuestion.type = "hidden";
+            hiddenQuestion.name = "question";
+            hiddenQuestion.value = question;
+            chatForm.appendChild(hiddenQuestion);
+            questionInput.name = "";
+            questionInput.value = "";
+
+            const emptyChat = chatMessages.querySelector(".empty-chat");
+            if (emptyChat) emptyChat.remove();
+
+            const userMessage = document.createElement("article");
+            userMessage.className = "chat-message user";
+            userMessage.innerHTML = '<div class="avatar">Y</div><div class="message-content"><p class="message-name">You</p><p></p></div>';
+            userMessage.querySelector(".message-content p:last-child").textContent = question;
+            chatMessages.appendChild(userMessage);
+
+            const loadingMessage = document.createElement("article");
+            loadingMessage.className = "chat-message assistant processing-message";
+            loadingMessage.innerHTML = '<div class="avatar">AI</div><div class="message-content"><p class="message-name">Assistant</p><p>Generating response <span class="typing-dots"><i></i><i></i><i></i></span></p></div>';
+            chatMessages.appendChild(loadingMessage);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            document.querySelectorAll("[data-lock-answer]").forEach((control) => {
+                control.disabled = true;
+            });
+            document.querySelectorAll(".source-option").forEach((option) => {
+                option.classList.add("locked");
+            });
+            filePicker.classList.add("disabled");
+            filePicker.setAttribute("aria-disabled", "true");
+        });
+    </script>
+</body>
+</html>
