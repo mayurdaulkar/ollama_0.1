@@ -1,0 +1,25 @@
+# Python bytecode and cache files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local virtual environment
+venv/
+.venv/
+
+# Locally generated ChromaDB vector database
+chroma_data/
+
+# Markdown files uploaded through the local web app
+uploads/
+
+# Local environment variables and secrets
+.env
+.env.*
+
+# Python build artifacts
+build/
+dist/
+*.egg-info/
