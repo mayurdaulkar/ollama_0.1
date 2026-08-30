@@ -57,5 +57,5 @@ python phase1_chat.py          # Chat from the terminal
 ```
 
 Application settings such as model names, upload size, and local ports are kept
-in `config.py`. Set `FLASK_SECRET_KEY` in the environment before exposing the
-application outside a local development machine.
+in `config.py`. Browser chat history is invalidated whenever `app.py` is
+restarted; uploaded knowledge sources remain stored locally in ChromaDB.

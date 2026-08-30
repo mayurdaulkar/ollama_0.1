@@ -1,6 +1,6 @@
 """Flask web interface for Ollama RAG Chat."""
 
-import os
+import secrets
 from pathlib import Path
 
 import chromadb
@@ -22,7 +22,8 @@ from phase1_chat import answer_question
 
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", "local-development-key")
+# A new key on every app start makes old browser chat sessions unreadable.
+app.config["SECRET_KEY"] = secrets.token_hex(32)
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_SIZE
 
 
