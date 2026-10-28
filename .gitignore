@@ -8,6 +8,8 @@ __pycache__/
 # Local virtual environment
 venv/
 .venv/
+new_venv/
+new2_venv/
 
 # Locally generated ChromaDB vector database
 chroma_data/
